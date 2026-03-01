@@ -8,6 +8,8 @@ EthernetServer server(80);  // Web server running on port 80
 File webFile;
 IPAddress ip(192, 168, 10, 222);  
 String latestPinStates = "";  // To store pin states from ESP32
+unsigned long lastUpdateMillis = 0; // Tracks the last time data was received
+bool hasReceivedData = false;
 
 void setup() {
   Serial.begin(9600);
@@ -85,6 +87,9 @@ void serveTankLevel(EthernetClient &client) {
   Serial.print("Serving Pin States: ");
   Serial.println(latestPinStates);
   
+  // If data was received recently (within 5 seconds), mark as live
+  bool isLive = hasReceivedData && (millis() - lastUpdateMillis < 5000);
+  
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: application/json");
   client.println("Connection: close");
@@ -93,7 +98,9 @@ void serveTankLevel(EthernetClient &client) {
   // Send JSON response
   client.print("{\"tank_level\":\"");
   client.print(latestPinStates);
-  client.println("\"}");
+  client.print("\",\"is_live\":");
+  client.print(isLive ? "true" : "false");
+  client.println("}");
 }
 
 void updateTankLevel(String request, EthernetClient &client) {
@@ -104,6 +111,8 @@ void updateTankLevel(String request, EthernetClient &client) {
     // Extract up to the first space or question mark
     valueString = valueString.substring(0, valueString.indexOf(' '));
     latestPinStates = valueString;
+    lastUpdateMillis = millis();
+    hasReceivedData = true;
     Serial.print("Updated Pin States: ");
     Serial.println(latestPinStates);
   }

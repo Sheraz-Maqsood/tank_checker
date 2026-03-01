@@ -82,11 +82,33 @@
       background: #4CAF50;
       color: white;
     }
+
+    .status-badge {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      padding: 6px 12px;
+      border-radius: 15px;
+      font-weight: bold;
+      font-size: 0.85em;
+      color: white;
+      transition: background-color 0.3s;
+      z-index: 10;
+    }
+
+    .status-live {
+      background-color: #4CAF50;
+    }
+
+    .status-stored {
+      background-color: #f44336;
+    }
   </style>
 </head>
 
 <body>
-  <div class="container">
+  <div class="container" style="position: relative;">
+    <div id="statusBadge" class="status-badge status-stored">Stored Data</div>
     <h1>Water Tank Level Monitor</h1>
 
     <div class="tank-container" id="tankContainer">
@@ -186,10 +208,23 @@
         .then(data => {
           const pinStates = data.tank_level; // Get the comma-separated string
           updateTankLevels(pinStates);
+
+          const badge = document.getElementById('statusBadge');
+          if (data.is_live) {
+            badge.textContent = 'Live Data';
+            badge.className = 'status-badge status-live';
+          } else {
+            badge.textContent = 'Stored Data';
+            badge.className = 'status-badge status-stored';
+          }
         })
         .catch(error => {
           console.error('Error fetching pin states:', error);
           logMessage('Error fetching pin states. Check connection.');
+
+          const badge = document.getElementById('statusBadge');
+          badge.textContent = 'Disconnected';
+          badge.className = 'status-badge status-stored';
         });
     }, 1000);
   </script>
