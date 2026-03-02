@@ -17,7 +17,7 @@ File webFile;
 //#define ECHO_PIN 6
 //#define MAX_DISTANCE 400 // Maximum distance in cm
 //NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE);
-unsigned int latestTankLevel = 0;  // To store distance from ESP32
+String latestTankLevel = "";  // To store pin states from ESP32
 
 
 void setup() {
@@ -119,13 +119,14 @@ void serveTankLevel(EthernetClient &client) {
   
   client.println("HTTP/1.1 200 OK");
   client.println("Content-Type: application/json");
+  client.println("Access-Control-Allow-Origin: *");
   client.println("Connection: close");
   client.println();
   
-  // Send JSON response
-  client.print("{\"tank_level\":");
+  // Send JSON response with correctly quoted string
+  client.print("{\"tank_level\":\"");
   client.print(latestTankLevel);
-  client.println("}");
+  client.println("\"}");
 }
 
 void updateTankLevel(String request, EthernetClient &client) {
@@ -134,7 +135,14 @@ void updateTankLevel(String request, EthernetClient &client) {
   int valueIndex = request.indexOf("value=");
   if (valueIndex >= 0) {
     String valueString = request.substring(valueIndex + 6);
-    latestTankLevel = valueString.toInt();
+    
+    // The HTTP request line ends with " HTTP/1.1", so we need to trim that suffix off
+    int spaceIndex = valueString.indexOf(" ");
+    if (spaceIndex >= 0) {
+      valueString = valueString.substring(0, spaceIndex);
+    }
+    
+    latestTankLevel = valueString;
     Serial.print("Updated Tank Level: ");
     Serial.println(latestTankLevel);
   }
