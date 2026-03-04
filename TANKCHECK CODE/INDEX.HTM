@@ -82,20 +82,57 @@
       background: #4CAF50;
       color: white;
     }
+
+    .status-indicator {
+      display: inline-flex;
+      align-items: center;
+      margin-bottom: 20px;
+      padding: 10px 20px;
+      border-radius: 50px;
+      background: #fff;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      font-weight: bold;
+      transition: all 0.3s ease;
+    }
+
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 10px;
+      background-color: #f44336;
+      /* Default Red */
+      transition: background-color 0.2s, box-shadow 0.2s;
+    }
+
+    .status-indicator.live .status-dot {
+      background-color: #4CAF50;
+      box-shadow: 0 0 8px #4CAF50;
+    }
+
+    .status-indicator.live {
+      border: 1px solid #4CAF50;
+      color: #2e7d32;
+    }
   </style>
 </head>
 
 <body>
   <div class="container">
     <h1>Water Tank Level Monitor</h1>
-    
+
+    <div class="status-indicator" id="statusIndicator">
+      <div class="status-dot"></div>
+      <span id="statusText">NO SIGNAL FROM ESP32</span>
+    </div>
+
     <div class="tank-container" id="tankContainer">
       <div class="level-text" id="tankPercentage">0%</div>
       <!-- Water levels will be added dynamically -->
     </div>
-    
+
     <div class="pin-info" id="pinInfo"></div>
-    
+
     <div class="logs">
       <p class="log-p" id="logP">Waiting for data...</p>
     </div>
@@ -106,16 +143,20 @@
     const tankPercentage = document.getElementById('tankPercentage');
     const logElement = document.getElementById('logP');
     const pinInfoElement = document.getElementById('pinInfo');
-    
+    const statusIndicator = document.getElementById('statusIndicator');
+    const statusText = document.getElementById('statusText');
+
     // GPIO pins being monitored (in order from bottom to top of tank)
     const pinNumbers = [0, 2, 4, 5, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27, 32, 33];
     const totalLevels = pinNumbers.length;
-    
+    let previousUpdateMillis = -1;
+    let signalTimeout;
+
     // Create water level indicators
     function createWaterLevels() {
       tankContainer.innerHTML = '';
       tankContainer.appendChild(tankPercentage);
-      
+
       // Create levels from bottom (Pin 0) to top (Pin 33)
       for (let i = 0; i < totalLevels; i++) {
         const level = document.createElement('div');
@@ -125,17 +166,17 @@
         tankContainer.appendChild(level);
       }
     }
-    
+
     // Update tank visualization
     function updateTankLevels(pinStates) {
       const states = pinStates.split(',');
       let activeCount = 0;
-      
+
       // Process from bottom (Pin 0) to top (Pin 33)
       for (let i = 0; i < totalLevels; i++) {
         const level = document.getElementById(`level-${i}`);
         const state = states[i];
-        
+
         if (state === '0') { // 0 means water is present (circuit complete)
           // Calculate color from RED (bottom) to BLUE (top)
           const hue = 0 + (i * (240 / totalLevels));
@@ -145,50 +186,81 @@
           level.style.backgroundColor = 'transparent';
         }
       }
-      
+
       // Calculate percentage
       const percentage = Math.round((activeCount / totalLevels) * 100);
       tankPercentage.textContent = `${percentage}%`;
-      
+
       // Update pin info (now in correct order from bottom to top)
       updatePinInfo(states);
-      
+
       logMessage(`Water levels updated. Active sensors: ${activeCount}/${totalLevels} (${percentage}%)`);
     }
-    
+
     // Update pin information display (now showing correct order)
     function updatePinInfo(states) {
       pinInfoElement.innerHTML = '';
-      
+
       states.forEach((state, index) => {
         const pinItem = document.createElement('div');
         pinItem.className = `pin-item ${state === '0' ? 'active' : ''}`;
-        pinItem.textContent = `Level ${index+1}: Pin ${pinNumbers[index]} (${state === '0' ? 'Wet' : 'Dry'})`;
+        pinItem.textContent = `Level ${index + 1}: Pin ${pinNumbers[index]} (${state === '0' ? 'Wet' : 'Dry'})`;
         pinInfoElement.appendChild(pinItem);
       });
     }
-    
+
     function logMessage(message) {
       console.log(message);
       logElement.textContent = message;
     }
-    
+
+    function setLiveStatus(isLive) {
+      if (isLive) {
+        statusIndicator.classList.add('live');
+        statusText.textContent = "LIVE SIGNAL (ESP32 Connected)";
+
+        // Clear existing timeout and set a new one
+        // If we don't get a new update in 3 seconds, mark as offline
+        clearTimeout(signalTimeout);
+        signalTimeout = setTimeout(() => {
+          setLiveStatus(false);
+        }, 3000);
+      } else {
+        statusIndicator.classList.remove('live');
+        statusText.textContent = "NO SIGNAL FROM ESP32";
+      }
+    }
+
     // Initialize tank visualization
     createWaterLevels();
-    
+
     // Fetch pin states from Arduino and update UI
     setInterval(() => {
       fetch('http://192.168.10.222/tank-level')
         .then(response => response.json())
         .then(data => {
-          const pinStates = data.tank_level; // Get the comma-separated string
-          updateTankLevels(pinStates);
+          // Check if the Arduino received a recent update from ESP32
+          const currentUpdateMillis = data.last_update_millis;
+
+          if (currentUpdateMillis !== undefined) {
+            if (currentUpdateMillis !== previousUpdateMillis) {
+              // The update time has changed, meaning the ESP *just* pushed new data!
+              setLiveStatus(true);
+              previousUpdateMillis = currentUpdateMillis;
+            }
+          }
+
+          if (data.tank_level && data.tank_level.length > 0) {
+            updateTankLevels(data.tank_level);
+          }
         })
         .catch(error => {
-          console.error('Error fetching pin states:', error);
-          logMessage('Error fetching pin states. Check connection.');
+          console.error('Error fetching data:', error);
+          logMessage('Error fetching data. Check connection to Arduino.');
+          setLiveStatus(false);
         });
     }, 1000);
   </script>
 </body>
+
 </html>

@@ -18,6 +18,7 @@ File webFile;
 //#define MAX_DISTANCE 400 // Maximum distance in cm
 //NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE);
 String latestTankLevel = "";  // To store pin states from ESP32
+unsigned long lastUpdateTime = 0; // To store the time of the last update from ESP32
 
 
 void setup() {
@@ -26,32 +27,32 @@ void setup() {
 
  // Initialize SD card
   if (!SD.begin(4)) {
-    Serial.println("SD card failed to initialize.");
+    Serial.println(F("SD card failed to initialize."));
     while (true);  // Halt further execution
   } else {
-    Serial.println("SD card initialized.");
+    Serial.println(F("SD card initialized."));
   }
 
   //Initialize Ethernet using DHCP
   // if (Ethernet.begin(mac) == 0) {
-  //   Serial.println("Ethernet shield failed to initialize.");
+  //   Serial.println(F("Ethernet shield failed to initialize."));
   //   while (true);  // Halt further execution
   // }else {
-  //   Serial.println("Ethernet shield initialized.");
+  //   Serial.println(F("Ethernet shield initialized."));
   // }
   //Ethernet.begin(mac, ip, gateway, subnet);
   // Use static IP address
   Ethernet.begin(mac, ip);
   // Start the server
   server.begin();
-  Serial.print("Server is at: ");
+  Serial.print(F("Server is at: "));
   Serial.println(Ethernet.localIP());  // Show the IP address assigned via DHCP
 }
 
 void loop() {
   EthernetClient client = server.available();
   if (client) {
-    Serial.println("Client connected.");
+    Serial.println(F("Client connected."));
     String request = ""; // To store the HTTP request line
     
     // Read the first line of the request
@@ -72,7 +73,7 @@ void loop() {
 
     delay(1); // Give the client time to receive the data
     client.stop(); 
-    Serial.println("Client disconnected.");
+    Serial.println(F("Client disconnected."));
     // Close the connection
     // client.println("HTTP/1.1 200 OK");
     // client.println("Content-Type: text/html");
@@ -94,9 +95,9 @@ void serveHtml(EthernetClient &client)
       webFile = SD.open("index.html");  
     }
     if (webFile) {
-      client.println("HTTP/1.1 200 OK");
-      client.println("Content-Type: text/html");
-      client.println("Connection: close");
+      client.println(F("HTTP/1.1 200 OK"));
+      client.println(F("Content-Type: text/html"));
+      client.println(F("Connection: close"));
       client.println();
 
       // Send the content of the file
@@ -106,32 +107,34 @@ void serveHtml(EthernetClient &client)
 
       webFile.close();
     } else {
-      Serial.println("Failed to open INDEX.HTM");
-      client.println("HTTP/1.1 404 Not Found");
-      client.println("Connection: close");
+      Serial.println(F("Failed to open INDEX.HTM"));
+      client.println(F("HTTP/1.1 404 Not Found"));
+      client.println(F("Connection: close"));
       client.println();
     }
 }
 
 void serveTankLevel(EthernetClient &client) {
-  Serial.print("Serving Tank Level: ");
+  Serial.print(F("Serving Tank Level: "));
   Serial.println(latestTankLevel);
   
-  client.println("HTTP/1.1 200 OK");
-  client.println("Content-Type: application/json");
-  client.println("Access-Control-Allow-Origin: *");
-  client.println("Connection: close");
+  client.println(F("HTTP/1.1 200 OK"));
+  client.println(F("Content-Type: application/json"));
+  client.println(F("Access-Control-Allow-Origin: *"));
+  client.println(F("Connection: close"));
   client.println();
   
-  // Send JSON response with correctly quoted string
-  client.print("{\"tank_level\":\"");
+  // Send JSON response with correctly quoted string and last update time
+  client.print(F("{\"tank_level\":\""));
   client.print(latestTankLevel);
-  client.println("\"}");
+  client.print(F("\", \"last_update_millis\":"));
+  client.print(lastUpdateTime);
+  client.println(F("}"));
 }
 
 void updateTankLevel(String request, EthernetClient &client) {
   // Parse the 'value' parameter from the request
-  Serial.println("updateTankLevel Called");
+  Serial.println(F("updateTankLevel Called"));
   int valueIndex = request.indexOf("value=");
   if (valueIndex >= 0) {
     String valueString = request.substring(valueIndex + 6);
@@ -143,13 +146,14 @@ void updateTankLevel(String request, EthernetClient &client) {
     }
     
     latestTankLevel = valueString;
-    Serial.print("Updated Tank Level: ");
+    lastUpdateTime = millis(); // Record the exact time we received this update
+    Serial.print(F("Updated Tank Level: "));
     Serial.println(latestTankLevel);
   }
 
   // Send HTTP response
-  client.println("HTTP/1.1 200 OK");
-  client.println("Connection: close");
+  client.println(F("HTTP/1.1 200 OK"));
+  client.println(F("Connection: close"));
   client.println();
-  client.println("Distance updated successfully");
+  client.println(F("Distance updated successfully"));
 }
